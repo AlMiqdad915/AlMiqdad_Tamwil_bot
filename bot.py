@@ -1,132 +1,94 @@
-import logging
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+import os
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# تفعيل نظام تسجيل الأخطاء (Logging)
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-
-# النص الترحيبي عند الضغط على /start
-START_TEXT = (
-    "👋 أهلاً بك في بوت المقداد للتمويل الذكي!\n\n"
-    "🚀 بوابتك الأولى نحو تضخيم قناتك ومجموعتك بأعضاء حقيقيين، بسرعة واحترافية.\n\n"
-    "✨ ماذا نقدم لك اليوم؟\n"
-    "✔ زيادة فورية لأعضاء قناتك/مجموعتك.\n"
-    "✔ نظام إحالات متقدم يضاعف أرباحك.\n"
-    "✔ تقارير لحظية تمنحك تحكماً كاملاً.\n\n"
-    "🔜 قريباً... خدمات حصرية إضافية (ترويج متقدم + سرفرات بوبجي) لعملائنا المميزين فقط!\n\n"
-    "📌 كيف تبدأ؟\n"
-    "اضغط على زر \"عرض الباقات\" لاختيار باقة التمويل المناسبة لك.\n\n"
-    "بوت المقداد... حيث تتحول القنوات الصغيرة إلى منصات مؤثرة 📈 والطلبات إلى أوامر ⚡ بأعلى كفاءة ودقة متناهية."
-)
-
-# أسماء الأزرار
-BUTTON_SERVICES = "🛒 الخدمات وتمويل قنواتك"
-BUTTON_EARN = "💎 تجميع نقاط مجانية"
-BUTTON_TRANSFER = "🔄 تحويل نقاط"
-BUTTON_PACKAGES = "📦 عرض الباقات المدفوعة"
-BUTTON_STATS = "📊 إحصائيات حسابي"
-BUTTON_CHECK = "🔍 فحص ومتابعة الطلب"
-BUTTON_SUPPORT = "📞 الدعم الفني والمراسلة"
-BUTTON_EXCLUSIVE = "🎮 خدمات حصرية (قريباً)"
-
-# هندسة وتوزيع الأزرار
-MAIN_KEYBOARD = [
-    [BUTTON_SERVICES],
-    [BUTTON_EARN, BUTTON_TRANSFER],
-    [BUTTON_PACKAGES, BUTTON_STATS],
-    [BUTTON_CHECK, BUTTON_SUPPORT],
-    [BUTTON_EXCLUSIVE]
+# قنوات الاشتراك الإجباري (يمكنك تعديل المعرفات والروابط حسب قنواتك)
+REQUIRED_CHANNELS = [
+    {"username": "@test1", "link": "https://t.me/test1"},
+    {"username": "@test2", "link": "https://t.me/test2"}
 ]
-reply_markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
 
-# دالة /start
+# دالة التحقق من الاشتراك الإجباري
+async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    for channel in REQUIRED_CHANNELS:
+        try:
+            member = await context.bot.get_chat_member(chat_id=channel["username"], user_id=user_id)
+            if member.status not in ['member', 'administrator', 'creator']:
+                return False
+        except Exception:
+            return False
+    return True
+
+# دالة الأمر /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(START_TEXT, reply_markup=reply_markup)
-
-# دالة التعامل مع الأزرار
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_text = update.message.text
     user = update.effective_user
+    user_id = user.id
 
-    if user_text == BUTTON_SERVICES:
+    if await check_subscription(user_id, context):
+        # القائمة الرئيسية إذا كان مشتركاً
+        keyboard = [
+            [InlineKeyboardButton("💰 طلب تمويل", callback_type="request_finance")],
+            [InlineKeyboardButton("📊 حسابي", callback_type="my_account"), InlineKeyboardButton("📞 الدعم الفني", callback_type="support")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
-            "🛒 <b>قسم الخدمات والتمويل:</b>\n\n"
-            "هنا يمكنك إطلاق حملات التمويل الخاصة بك وزيادة أعضاء قناتك أو مجموعتك فوراً.\n"
-            "الرجاء تجميع النقاط أولاً أو شراء باقة مدفوعة للبدء.",
-            parse_mode="HTML"
+            f"أهلاً بك يا {user.first_name} في بوت التمويل السريع! ✨\n\nالرجاء اختيار الخدمة المطلوبة من الأسفل:",
+            reply_markup=reply_markup
         )
-
-    elif user_text == BUTTON_EARN:
+    else:
+        # رسالة الاشتراك الإجباري إذا لم يكن مشتركاً
+        buttons = []
+        for channel in REQUIRED_CHANNELS:
+            buttons.append([InlineKeyboardButton(f"📢 اشترك في {channel['username']}", url=channel['link'])])
+        
+        buttons.append([InlineKeyboardButton("🔄 تحقق من الاشتراك", callback_data="check_sub")])
+        reply_markup = InlineKeyboardMarkup(buttons)
+        
         await update.message.reply_text(
-            "💰 <b>قائمة كسب النقاط والأرباح مجاناً:</b>\n\n"
-            "• 👥 <b>دعوة الأصدقاء (رابط الإحالة):</b> شارك رابطك واكسب نقاطاً عن كل مشترك جديد.\n"
-            "• 📢 <b>الاشتراك في القنوات:</b> انضم للقنوات المدعومة واكسب نقاطاً فورية.\n"
-            "• 🎁 <b>الهدية اليومية:</b> اضغط على الهدية مرة كل 24 ساعة للمطالبة بنقاط مجانية.",
-            parse_mode="HTML"
+            "⚠️ عذراً يا عزيزي، يجب عليك الاشتراك في قنوات البوت أولاً لتتمكن من استخدامه!",
+            reply_markup=reply_markup
         )
 
-    elif user_text == BUTTON_TRANSFER:
-        await update.message.reply_text(
-            "🔄 <b>قسم تحويل النقاط:</b>\n\nيمكنك تحويل رصيد نقاطك إلى مستخدم آخر عن طريق إرسال الآيدي الخاص به وقيمة النقاط.",
-            parse_mode="HTML"
-        )
+# دالة التعامل مع الأزرار التفاعلية
+async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
 
-    elif user_text == BUTTON_STATS:
-        stats_msg = (
-            f"📊 <b>مستخدمنا العزيز، إليك تفاصيل حسابك الحالي:</b>\n\n"
-            f"• 👤 <b>الاسم:</b> {user.first_name}\n"
-            f"• 🆔 <b>الآيدي الخاص بك:</b> <code>{user.id}</code>\n"
-            f"• 💰 <b>رصيد نقاطك:</b> <code>0 نقطة</code>\n"
-            f"• 👥 <b>عدد إحالاتك:</b> <code>0 مستخدم</code>\n\n"
-            f"🔗 <i>رابط الإحالة الخاص بك لكسب النقاط مجاناً:</i>\n"
-            f"https://t.me/AlMiqdad_Tamwil_bot?start={user.id}"
-        )
-        await update.message.reply_text(stats_msg, parse_mode="HTML")
+    if query.data == "check_sub":
+        if await check_subscription(user_id, context):
+            await query.edit_message_text("✅ تم التحقق بنجاح! أرسل /start الآن لتظهر لك القائمة الرئيسية.")
+        else:
+            await query.edit_message_text("❌ لم تشترك في جميع القنوات بعد! فضلاً اشترك واضغط تحقق مجدداً.")
 
-    elif user_text == BUTTON_PACKAGES:
-        packages_msg = (
-            "📦 <b>باقات تمويل وزيادة أعضاء تليجرام (أعضاء حقيقيين ومتفاعلين):</b>\n\n"
-            "• 🌱 <b>الباقة البرونزية:</b> 500 عضو مقابل [أدخل السعر]\n"
-            "• 🥈 <b>الباقة الفضية:</b> 1000 عضو مقابل [أدخل السعر]\n"
-            "• 🥇 <b>الباقة الذهبية:</b> 5000 عضو مقابل [أدخل السعر]\n\n"
-            "⚠️ <i>ملاحظة: لشراء أي باقة وتفعيلها فوراً، يرجى الضغط على زر الدعم الفني وتزويدنا برابط قناتك والباقة المطلوبة.</i>"
-        )
-        await update.message.reply_text(packages_msg, parse_mode="HTML")
-
-    elif user_text == BUTTON_CHECK:
-        await update.message.reply_text(
-            "🔍 <b>قسم فحص ومتابعة الطلبات:</b>\n\nأدخل رقم طلب التمويل الخاص بك لمعرفة حالة التنفيذ اللحظية.",
-            parse_mode="HTML"
-        )
-
-    elif user_text == BUTTON_SUPPORT:
-        support_msg = (
-            "📞 <b>قسم الدعم الفني والطلبات الخاصة:</b>\n\n"
-            "نحن هنا لخدمتك ومساعدتك في تفعيل باقاتك أو حل أي مشكلة تواجهك. لتقديم طلب أو استفسار، تواصل مباشرة مع الإدارة عبر الحساب التالي:\n\n"
-            "👤 <b>مطور البوت والدعم الفني:</b> @AlMiqdad_Support\n\n"
-            "<i>أوقات الرد: متواجدون على مدار الساعة لخدمتكم بأفضل كفاءة!</i> ✨"
-        )
-        await update.message.reply_text(support_msg, parse_mode="HTML")
-
-    elif user_text == BUTTON_EXCLUSIVE:
-        await update.message.reply_text(
-            "🎮 <b>خدمات حصرية (قريباً):</b>\n\nترقبوا إطلاق خدمات الترويج المتقدمة وسيرفرات شحن بوبجي لعملائنا المميزين قريباً جداً!",
-            parse_mode="HTML"
-        )
+# دالة التعامل مع الرسائل النصية
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    if not await check_subscription(user_id, context):
+        await update.message.reply_text("⚠️ الرجاء الاشتراك في القنوات أولاً لتفعيل البوت! أرسل /start")
+        return
+    
+    await update.message.reply_text("📥 تم استلام طلبك، سيقوم الدعم الفني بمراجعته والتواصل معك قريباً.")
 
 def main() -> None:
-    # ضع هنا التوكين الخاص بالبوت الذي حصلت عليه من BotFather
-    BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+    # 🔒 التعديل الحاسم لقراءة التوكين من إعدادات موقع Render بأمان وبدون حظر
+    BOT_TOKEN = os.environ.get("BOT_TOKEN")
     
+    if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
+        print("❌ خطأ: لم يتم العثور على التوكين في السيرفر!")
+        return
+
+    # بناء التطبيق
     application = Application.builder().token(BOT_TOKEN).build()
 
+    # إضافة الحوافظ (Handlers)
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CallbackQueryHandler(button_click))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    application.run_polling()
+    # تشغيل البوت بشكل مستمر
+    print("⚡ البوت يعمل الآن بنجاح وبأمان تام على السيرفر...")
+    application.run_polling(close_loop=False)
 
 if __name__ == '__main__':
     main()
