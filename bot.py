@@ -2,10 +2,11 @@ import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# قنوات الاشتراك الإجباري (يمكنك تعديل المعرفات والروابط حسب قنواتك)
+# 📢 قنوات الاشتراك الإجباري التي أرسلتها
 REQUIRED_CHANNELS = [
-    {"username": "@test1", "link": "https://t.me/test1"},
-    {"username": "@test2", "link": "https://t.me/test2"}
+    {"username": "@Abdullbari62287", "link": "https://t.me/Abdullbari62287"},
+    {"username": "@naseer_jobran", "link": "https://t.me/naseer_jobran"},
+    {"username": "@Zawamil_Alkasir", "link": "https://t.me/Zawamil_Alkasir"}
 ]
 
 # دالة التحقق من الاشتراك الإجباري
@@ -16,6 +17,7 @@ async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
             if member.status not in ['member', 'administrator', 'creator']:
                 return False
         except Exception:
+            # في حال حدوث أي خطأ (مثلاً البوت ليس مشرفاً في القناة)، يفضل تركه يمر أو التحقق
             return False
     return True
 
@@ -25,10 +27,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = user.id
 
     if await check_subscription(user_id, context):
-        # القائمة الرئيسية إذا كان مشتركاً
+        # القائمة الرئيسية بعد تحقق الاشتراك
         keyboard = [
-            [InlineKeyboardButton("💰 طلب تمويل", callback_type="request_finance")],
-            [InlineKeyboardButton("📊 حسابي", callback_type="my_account"), InlineKeyboardButton("📞 الدعم الفني", callback_type="support")]
+            [InlineKeyboardButton("💰 طلب تمويل", callback_data="request_finance")],
+            [InlineKeyboardButton("📊 حسابي", callback_data="my_account"), InlineKeyboardButton("📞 الدعم الفني", callback_data="support")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
@@ -36,7 +38,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             reply_markup=reply_markup
         )
     else:
-        # رسالة الاشتراك الإجباري إذا لم يكن مشتركاً
+        # رسالة الاشتراك الإجباري إذا لم يكن مشتركاً في القنوات الثلاث
         buttons = []
         for channel in REQUIRED_CHANNELS:
             buttons.append([InlineKeyboardButton(f"📢 اشترك في {channel['username']}", url=channel['link'])])
@@ -59,7 +61,17 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if await check_subscription(user_id, context):
             await query.edit_message_text("✅ تم التحقق بنجاح! أرسل /start الآن لتظهر لك القائمة الرئيسية.")
         else:
-            await query.edit_message_text("❌ لم تشترك في جميع القنوات بعد! فضلاً اشترك واضغط تحقق مجدداً.")
+            # إذا ضغط ولم يشترك بعد، تظهر له القنوات مرة أخرى
+            buttons = []
+            for channel in REQUIRED_CHANNELS:
+                buttons.append([InlineKeyboardButton(f"📢 اشترك في {channel['username']}", url=channel['link'])])
+            buttons.append([InlineKeyboardButton("🔄 تحقق من الاشتراك", callback_data="check_sub")])
+            reply_markup = InlineKeyboardMarkup(buttons)
+            
+            await query.edit_message_text(
+                "❌ لم تشترك في جميع القنوات بعد! فضلاً اشترك في القنوات الثلاث ثم اضغط تحقق مجدداً.",
+                reply_markup=reply_markup
+            )
 
 # دالة التعامل مع الرسائل النصية
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -71,7 +83,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text("📥 تم استلام طلبك، سيقوم الدعم الفني بمراجعته والتواصل معك قريباً.")
 
 def main() -> None:
-    # 🔒 التعديل الحاسم لقراءة التوكين من إعدادات موقع Render بأمان وبدون حظر
+    # قراءة التوكين من إعدادات Render
     BOT_TOKEN = os.environ.get("BOT_TOKEN")
     
     if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
@@ -81,12 +93,12 @@ def main() -> None:
     # بناء التطبيق
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # إضافة الحوافظ (Handlers)
+    # إضافة الحوافظ
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_click))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # تشغيل البوت بشكل مستمر
+    # تشغيل البوت
     print("⚡ البوت يعمل الآن بنجاح وبأمان تام على السيرفر...")
     application.run_polling(close_loop=False)
 
